@@ -1,5 +1,10 @@
+jupyterlab
+jupyterlab-kite
 matplotlib
+numpy
+pandas
 sklearn
+statsmodels
 torch
 torchvision
 xgboost
