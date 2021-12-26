@@ -1,10 +1,12 @@
 jupyterlab
 jupyterlab-kite
+keras
 matplotlib
 numpy
 pandas
 sklearn
 statsmodels
+tensorflow
 torch
 torchvision
 xgboost
