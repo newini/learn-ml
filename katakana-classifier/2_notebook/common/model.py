@@ -1,61 +1,80 @@
 # coding: utf-8
 import numpy as np
 from collections import OrderedDict
-from common.layers import Convolution, MaxPooling, ReLU, Affine, SoftmaxWithLoss
-from common.optimizer import Adam
+from common.layers import Convolution, MaxPooling, ReLU, BatchNormalization, Affine, SoftmaxWithLoss
 
+def heNormalInitializer(n1):
+    """
+    Heの初期値を利用するための関数
+    返り値は、見かけの標準偏差
+    """    
+    return np.sqrt(2/n1)
+
+def calculateOutputSize(input_size, pad, size, stride):
+    return (input_size + 2*pad - size) // stride + 1
+    
 class Conv2DNN:
     def __init__(
         self, input_dim=(1, 28, 28), 
-        conv_param={'filter_num':30, 'filter_size':5, 'pad':0, 'stride':1},
-        pool_param={'pool_size':2, 'pad':0, 'stride':2},
-        hidden_size=100, output_size=10, weight_init_std=0.01
+        weight_init_std=0.01,
+        **kwargs
     ):
         """
-        input_size : tuple, 入力の配列形状(チャンネル数、画像の高さ、画像の幅)
-        conv_param : dict, 畳み込みの条件
-        pool_param : dict, プーリングの条件
-        hidden_size : int, 隠れ層のノード数
-        output_size : int, 出力層のノード数
+        input_dim : tuple, 入力の配列形状(チャンネル数、画像の高さ、画像の幅)
         weight_init_std ： float, 重みWを初期化する際に用いる標準偏差
         """
-                
-        filter_num = conv_param['filter_num']
-        filter_size = conv_param['filter_size']
-        filter_pad = conv_param['pad']
-        filter_stride = conv_param['stride']
-        
-        pool_size = pool_param['pool_size']
-        pool_pad = pool_param['pad']
-        pool_stride = pool_param['stride']
-        
+                        
+        channel_size = input_dim[0]
         input_size = input_dim[1]
-        conv_output_size = (input_size + 2*filter_pad - filter_size) // filter_stride + 1 # 畳み込み後のサイズ(H,W共通)
-        pool_output_size = (conv_output_size + 2*pool_pad - pool_size) // pool_stride + 1 # プーリング後のサイズ(H,W共通)
-        pool_output_pixel = filter_num * pool_output_size * pool_output_size # プーリング後のピクセル総数
+        layer_params = kwargs['layer_params']
+        self.layer_name_list = kwargs['layer_params'].keys()
         
-        # 重みの初期化
+        # 重みの初期化, レイヤの生成, layer追加を同時にやる
         self.params = {}
-        std = weight_init_std
-        self.params['W1'] = std * np.random.randn(filter_num, input_dim[0], filter_size, filter_size) # W1は畳み込みフィルターの重みになる
-        self.params['b1'] = np.zeros(filter_num) #b1は畳み込みフィルターのバイアスになる
-        self.params['W2'] = std * np.random.randn(pool_output_pixel, hidden_size)
-        self.params['b2'] = np.zeros(hidden_size)
-        self.params['W3'] = std * np.random.randn(hidden_size, output_size)
-        self.params['b3'] = np.zeros(output_size)
-
-        # レイヤの生成
         self.layers = OrderedDict()
-        self.layers['Conv1'] = Convolution(self.params['W1'], self.params['b1'],
-                                           conv_param['stride'], conv_param['pad']) # W1が畳み込みフィルターの重み, b1が畳み込みフィルターのバイアスになる
-        self.layers['ReLU1'] = ReLU()
-        self.layers['Pool1'] = MaxPooling(pool_h=pool_size, pool_w=pool_size, stride=pool_stride, pad=pool_pad)
-        self.layers['Affine1'] = Affine(self.params['W2'], self.params['b2'])
-        self.layers['ReLU2'] = ReLU()
-        self.layers['Affine2'] = Affine(self.params['W3'], self.params['b3'])
+        std = weight_init_std
+        i = 0
+        for key in self.layer_name_list:
+            if 'Conv' in key:
+                units = layer_params[key]['channel']*layer_params[key]['size']**2
+                std = heNormalInitializer(units)
+                self.params[f'W{i}'] = std * np.random.randn(layer_params[key]['channel'], channel_size, layer_params[key]['size'], layer_params[key]['size'])
+                self.params[f'b{i}'] = np.zeros(layer_params[key]['channel'])
+                self.layers[key] = Convolution(self.params[f'W{i}'], self.params[f'b{i}'], layer_params[key]['stride'], layer_params[key]['pad'])
+                output_size = calculateOutputSize(input_size, layer_params[key]['pad'], layer_params[key]['size'], layer_params[key]['stride'])
+                channel_size = layer_params[key]['channel']
+                params = self.layers[key].W.size + self.layers[key].b.size
+                print(f'{key}\t\t{(None, channel_size, output_size, output_size)}\t{params}')
+                i += 1
+            elif 'Pool' in key:
+                self.layers[key] = MaxPooling(pool_h=layer_params[key]['size'], pool_w=layer_params[key]['size'], stride=layer_params[key]['stride'], pad=layer_params[key]['pad'])
+                output_size = calculateOutputSize(input_size, layer_params[key]['pad'], layer_params[key]['size'], layer_params[key]['stride'])
+                print(f'{key}\t\t{(None, channel_size, output_size, output_size)}')
+            elif 'ReLU' in key:
+                self.layers[key] = ReLU()
+            elif 'BatchNorm' in key:
+                gamma = np.ones(channel_size)
+                beta = np.zeros(channel_size)
+                self.layers[key] = BatchNormalization(gamma, beta)
+                print(f'{key}\t{(None, channel_size, output_size, output_size)}')
+            elif 'Flatten' in key:
+                output_size = channel_size * output_size * output_size
+                print(f'{key}\t\t{(None, output_size)}')
+            elif 'Affine' in key:
+                units = layer_params[key]['hidden_size']
+                std = heNormalInitializer(units)
+                self.params[f'W{i}'] = std * np.random.randn(input_size, layer_params[key]['hidden_size'])
+                self.params[f'b{i}'] = np.zeros(layer_params[key]['hidden_size'])
+                self.layers[key] = Affine(self.params[f'W{i}'], self.params[f'b{i}'])
+                output_size = layer_params[key]['hidden_size']
+                params = self.layers[key].W.size + self.layers[key].b.size
+                print(f'{key}\t\t{(None, output_size)}\t\t{params}')
+                i += 1
+                
+            input_size = output_size
 
         self.last_layer = SoftmaxWithLoss()
-
+    
     def predict(self, x):
         for layer in self.layers.values():
             x = layer.forward(x)
@@ -110,8 +129,12 @@ class Conv2DNN:
 
         # 設定
         grads = {}
-        grads['W1'], grads['b1'] = self.layers['Conv1'].dW, self.layers['Conv1'].db
-        grads['W2'], grads['b2'] = self.layers['Affine1'].dW, self.layers['Affine1'].db
-        grads['W3'], grads['b3'] = self.layers['Affine2'].dW, self.layers['Affine2'].db
-
+        i = 0
+        for key in self.layer_name_list:
+            if (
+                ('Conv' in key) or ('Affine' in key)
+            ):
+                grads[f'W{i}'], grads[f'b{i}'] = self.layers[key].dW, self.layers[key].db
+                i += 1
+        
         return grads
