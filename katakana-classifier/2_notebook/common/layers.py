@@ -158,7 +158,7 @@ class BatchNormalization:
 
         # 予測時に使用する平均と分散
         self.moving_mean = moving_mean # muの移動平均
-        self.moving_var = moving_var        # varの移動平均
+        self.moving_var = moving_var # varの移動平均
         
         # 計算中に算出される値を保持しておく変数群
         self.batch_size = None
