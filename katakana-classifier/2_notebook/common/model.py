@@ -140,14 +140,24 @@ class Conv2DNN:
 
         return x
 
-    def loss(self, x, t, train_flg=True):
+    def loss(self, x, t, train_flg=True, batch_size=100):
         """
         損失関数
         x : 入力データ
         t : 教師データ
         """
-        y = self.predict(x, train_flg)
-        return self.last_layer.forward(y, t)
+        loss = 0.0
+        batch_loop_size = int(np.ceil(x.shape[0] / batch_size))
+        for i in range( batch_loop_size ):
+            tx = x[i*batch_size:(i+1)*batch_size]
+            tt = t[i*batch_size:(i+1)*batch_size]
+            yy = self.predict(tx, train_flg)
+            loss += self.last_layer.forward(yy, tt)
+
+        return loss/batch_loop_size
+    
+        # y = self.predict(x, train_flg)
+        # return self.last_layer.forward(y, t)
 
     def accuracy(self, x, t, batch_size=100):
         if t.ndim != 1:
