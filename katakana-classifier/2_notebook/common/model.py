@@ -59,16 +59,21 @@ class Conv2DNN:
             elif 'ReLU' in key:
                 self.layers[key] = ReLU()
             elif 'BatchNorm' in key:
-                self.params[f'gamma{i}'] = np.ones(channel_size)
-                self.params[f'beta{i}'] = np.zeros(channel_size)
-                self.bn_params[f'moving_mean{i}'] = np.zeros(channel_size)
-                self.bn_params[f'moving_var{i}'] = np.zeros(channel_size)
+                if channel_size == 0: # dim 2
+                    bn_gamma_size = input_size
+                else: # dim 4
+                    bn_gamma_size = channel_size
+                self.params[f'gamma{i}'] = np.ones(bn_gamma_size)
+                self.params[f'beta{i}'] = np.zeros(bn_gamma_size)
+                self.bn_params[f'moving_mean{i}'] = np.zeros(bn_gamma_size)
+                self.bn_params[f'moving_var{i}'] = np.zeros(bn_gamma_size)
                 self.layers[key] = BatchNormalization(self.params[f'gamma{i}'], self.params[f'beta{i}'], moving_mean=self.bn_params[f'moving_mean{i}'], moving_var=self.bn_params[f'moving_var{i}'])
                 i += 1
             elif 'Dropout' in key:
                 self.layers[key] = Dropout(layer_params[key]['dropout'])
             elif 'Flatten' in key:
                 output_size = channel_size * output_size * output_size
+                channel_size = 0
             elif 'Affine' in key:
                 fan_in = input_size
                 fan_out = layer_params[key]['hidden_size']
@@ -106,11 +111,15 @@ class Conv2DNN:
             elif 'BatchNorm' in key:
                 gamma_size = self.layers[key].gamma.shape
                 params = self.layers[key].gamma.size * 4 # gamma, beta, moving_mean, moving_var have the same size
-                print(f'{key}\t{(None, channel_size, output_size, output_size)}\t{params}\t{gamma_size}, {gamma_size}, {gamma_size}, {gamma_size}')
+                if channel_size == 0: # dim 2 
+                    print(f'{key}\t{(None, output_size)}\t\t{params}\t{gamma_size}, {gamma_size}, {gamma_size}, {gamma_size}')
+                else: # dim 4
+                    print(f'{key}\t{(None, channel_size, output_size, output_size)}\t{params}\t{gamma_size}, {gamma_size}, {gamma_size}, {gamma_size}')
             elif 'Dropout' in key:
                 print(f'{key}\t{(None, channel_size, output_size, output_size)}')
             elif 'Flatten' in key:
                 output_size = channel_size * output_size * output_size
+                channel_size = 0
                 print(f'{key}\t\t{(None, output_size)}')
             elif 'Affine' in key:
                 units = layer_params[key]['hidden_size']
